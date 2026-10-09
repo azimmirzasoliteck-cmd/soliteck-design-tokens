@@ -38,3 +38,4 @@ jobs:
             git pull --rebase origin main # Pulls your latest web edits first to eliminate sync rejections
             git push origin main
           fi
+
