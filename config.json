@@ -1,13 +1,27 @@
 {
   "source": ["tokens.json"],
   "platforms": {
-    "css": {
-      "transformGroup": "css",
-      "buildPath": "build/css/",
-      "files": [{
-        "destination": "variables.css",
-        "format": "css/variables"
-      }]
+    "web/tailwind": {
+      "transformGroup": "js",
+      "buildPath": "build/web/",
+      "files": [
+        {
+          "destination": "tailwind-tokens.js",
+          "format": "javascript/module-flat"
+        }
+      ]
+    },
+    "android/compose": {
+      "transformGroup": "android",
+      "buildPath": "build/android/",
+      "files": [
+        {
+          "destination": "DesignTokens.kt",
+          "format": "compose/object",
+          "className": "DesignTokens",
+          "packageName": "com.soliteck.designsystem"
+        }
+      ]
     }
   }
 }
