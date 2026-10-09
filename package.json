@@ -4,7 +4,7 @@
   "description": "Automated cross-platform token pipeline for Soliteck",
   "main": "index.js",
   "scripts": {
-    "build-tokens": "style-dictionary build"
+  "build-tokens": "node build.js"
   },
   "repository": {
     "type": "git",
