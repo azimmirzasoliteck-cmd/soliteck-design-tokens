@@ -25,31 +25,44 @@ function sanitizeAndFlatten(obj) {
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
-// Safe helper function to pull out the exact dollar-sign \$value or value fallback
-function findValue(token) {
-  if (!token) return '';
-  // Check the modern token property formats first
-  if (token.value !== undefined) return token.value;
-  if (token.value !== undefined) return token.value;
-  if (token.original) {
-    if (token.original.value !== undefined) return token.original.value;
-    if (token.original.value !== undefined) return token.original.value;
+// Recursive lookup function to trace down the raw value parameter no matter the nesting depth
+function discoverValue(tokenObj) {
+  if (!tokenObj) return '';
+  if (tokenObj.value !== undefined) return tokenObj.value;
+  if (tokenObj.value !== undefined) return tokenObj.value;
+  if (typeof tokenObj === 'object') {
+    if (tokenObj.value !== undefined) return tokenObj.value;
+    if (tokenObj.value !== undefined) return tokenObj.value;
+    // Fall back to original definition structures
+    if (tokenObj.original) {
+      if (tokenObj.original.value !== undefined) return tokenObj.original.value;
+      if (tokenObj.original.value !== undefined) return tokenObj.original.value;
+    }
+    // Deep structural scan if the value is nested under a primary key
+    for (const subKey in tokenObj) {
+      if (subKey === 'value' || subKey === '\$value') return tokenObj[subKey];
+    }
   }
   return '';
 }
 
-// 3. Register Custom Formats to safely extract values
+// 3. Register Custom Formats using robust modern token maps
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
     const tokens = {};
-    dictionary.allTokens.forEach(token => {
-      const val = findValue(token);
-      if (val !== '') {
+    const targetTokens = dictionary.allTokens || [];
+    
+    targetTokens.forEach(token => {
+      let val = discoverValue(token);
+      if (!val && token.original) val = discoverValue(token.original);
+      
+      if (val !== undefined && val !== '') {
         const cleanKey = token.path.join('-').replace(/[^a-zA-Z0-9-]/g, '');
         tokens[cleanKey] = val;
       }
     });
+    
     return `/**\n * Do not edit directly, this file was auto-generated.\n */\n\nmodule.exports = ${JSON.stringify(tokens, null, 2)};\n`;
   }
 });
@@ -59,9 +72,13 @@ StyleDictionary.registerFormat({
   format: async function({ dictionary }) {
     let output = `package com.soliteck.designsystem\n\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.unit.dp\n\n/**\n * Do not edit directly, this file was auto-generated.\n */\n\nobject DesignTokens {\n`;
     
-    dictionary.allTokens.forEach(token => {
-      const val = findValue(token);
-      if (val !== '') {
+    const targetTokens = dictionary.allTokens || [];
+    
+    targetTokens.forEach(token => {
+      let val = discoverValue(token);
+      if (!val && token.original) val = discoverValue(token.original);
+      
+      if (val !== undefined && val !== '') {
         const cleanName = token.path.map(p => {
           return p.replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() + p.replace(/[^a-zA-Z0-9]/g, '').slice(1);
         }).join('');
