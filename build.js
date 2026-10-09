@@ -25,13 +25,16 @@ function sanitizeAndFlatten(obj) {
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
-// Helper function to extract a value from a token no matter where it is hidden
-function extractValue(token) {
+// Safe helper function to pull out the exact dollar-sign \$value or value fallback
+function findValue(token) {
   if (!token) return '';
+  // Check the modern token property formats first
   if (token.value !== undefined) return token.value;
   if (token.value !== undefined) return token.value;
-  if (token.original && token.original.value !== undefined) return token.original.value;
-  if (token.original && token.original.value !== undefined) return token.original.value;
+  if (token.original) {
+    if (token.original.value !== undefined) return token.original.value;
+    if (token.original.value !== undefined) return token.original.value;
+  }
   return '';
 }
 
@@ -41,9 +44,8 @@ StyleDictionary.registerFormat({
   format: async function({ dictionary }) {
     const tokens = {};
     dictionary.allTokens.forEach(token => {
-      const val = extractValue(token);
+      const val = findValue(token);
       if (val !== '') {
-        // Clean up the object key name for Tailwind matching
         const cleanKey = token.path.join('-').replace(/[^a-zA-Z0-9-]/g, '');
         tokens[cleanKey] = val;
       }
@@ -58,14 +60,12 @@ StyleDictionary.registerFormat({
     let output = `package com.soliteck.designsystem\n\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.unit.dp\n\n/**\n * Do not edit directly, this file was auto-generated.\n */\n\nobject DesignTokens {\n`;
     
     dictionary.allTokens.forEach(token => {
-      const val = extractValue(token);
+      const val = findValue(token);
       if (val !== '') {
-        // Clean up name: remove slashes, hyphens, and illegal characters for Kotlin variables
         const cleanName = token.path.map(p => {
           return p.replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() + p.replace(/[^a-zA-Z0-9]/g, '').slice(1);
         }).join('');
         
-        // Ensure variable name doesn't start with a number or weird underscore
         let finalVarName = cleanName.replace(/^[^a-zA-Z]+/, '');
         if (!finalVarName) finalVarName = "Token" + Math.floor(Math.random() * 100);
 
@@ -86,7 +86,7 @@ StyleDictionary.registerFormat({
   }
 });
 
-// 4. Initialize Style Dictionary and explicitly force reference evaluation bypass
+// 4. Initialize Style Dictionary instance
 const sd = new StyleDictionary({
   source: ['tokens-sanitized.json'],
   log: {
@@ -120,5 +120,4 @@ const sd = new StyleDictionary({
   }
 });
 
-// 5. Run the cross-platform compilation matrices
 await sd.buildAllPlatforms();
