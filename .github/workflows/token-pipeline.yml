@@ -4,7 +4,8 @@ on:
     branches:
       - main
     paths:
-      - 'tokens.json' # Triggers only when your Figma plugin updates this file
+      - 'tokens.json'
+      - '.github/workflows/token-pipeline.yml' # Allows manual test triggers when updating this file
 
 jobs:
   build-and-compile:
@@ -20,24 +21,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Build Systems
-        run: npm ci
+        run: npm install # Ensures all package config dependencies fetch properly
 
       - name: Run Style Dictionary Compiler
-        run: npm run build-tokens
-
-      - name: Open Automated Engineering PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: \${{ secrets.GITHUB_TOKEN }}
-          commit-message: "style: automated design token optimization updates"
-          branch: feature/compiled-tokens-update
-          title: "🎨 Core Design System Variables Update"
-          body: |
-            ### ⚙️ Design Token Automation Report
-            This is an automated pull request triggered by adjustments made inside the Figma architecture panel.
-
-            * **Compiler Engine:** Style Dictionary v4
-            * **Updated File Target:** `build/css/variables.css`
-
-            Please review the visual layout parameters before squashing into the stable production core.
-          labels: design-system, automated-pr
+        run: node build.js # Explicitly executes your custom javascript pre-parser script
