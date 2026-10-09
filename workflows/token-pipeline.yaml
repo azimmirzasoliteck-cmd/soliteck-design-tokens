@@ -1,0 +1,43 @@
+name: Transform Figma Tokens into Production Code
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'tokens.json' # Triggers only when your Figma plugin updates this file
+
+jobs:
+  build-and-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Architecture
+        uses: actions/checkout@v4
+
+      - name: Initialize Node Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Build Systems
+        run: npm ci
+
+      - name: Run Style Dictionary Compiler
+        run: npm run build-tokens
+
+      - name: Open Automated Engineering PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: \${{ secrets.GITHUB_TOKEN }}
+          commit-message: "style: automated design token optimization updates"
+          branch: feature/compiled-tokens-update
+          title: "🎨 Core Design System Variables Update"
+          body: |
+            ### ⚙️ Design Token Automation Report
+            This is an automated pull request triggered by adjustments made inside the Figma architecture panel.
+
+            * **Compiler Engine:** Style Dictionary v4
+            * **Updated File Target:** `build/css/variables.css`
+
+            Please review the visual layout parameters before squashing into the stable production core.
+          labels: design-system, automated-pr
