@@ -1,5 +1,6 @@
 {
   "source": ["tokens.json"],
+  "include": ["tokens.json"],
   "platforms": {
     "web/tailwind": {
       "transformGroup": "js",
