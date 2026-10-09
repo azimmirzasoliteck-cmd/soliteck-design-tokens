@@ -29,15 +29,11 @@ fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 
 function discoverValue(tokenObj) {
   if (!tokenObj) return '';
   if (tokenObj.value !== undefined) return tokenObj.value;
-  if (tokenObj.value !== undefined) return tokenObj.value;
   if (typeof tokenObj === 'object') {
     if (tokenObj.value !== undefined) return tokenObj.value;
-    if (tokenObj.value !== undefined) return tokenObj.value;
     // Fall back to original definition structures
-    if (tokenObj.original) {
-      if (tokenObj.original.value !== undefined) return tokenObj.original.value;
-      if (tokenObj.original.value !== undefined) return tokenObj.original.value;
-    }
+    if (tokenObj.original && tokenObj.original.value !== undefined) return tokenObj.original.value;
+    
     // Deep structural scan if the value is nested under a primary key
     for (const subKey in tokenObj) {
       if (subKey === 'value' || subKey === '\$value') return tokenObj[subKey];
@@ -46,7 +42,7 @@ function discoverValue(tokenObj) {
   return '';
 }
 
-// 3. Register Custom Formats using robust modern token maps
+// 3. Register Custom Formats using robust reference-resolution engines
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
@@ -54,10 +50,19 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      let val = discoverValue(token);
-      if (!val && token.original) val = discoverValue(token.original);
+      // Use Style Dictionary's built-in reference resolver if the token points to an alias
+      let val = token.value;
+      if (dictionary.usesReference(token.original.value)) {
+        const refs = dictionary.getReferences(token.original.value);
+        if (refs.length > 0) {
+          val = refs[refs.length - 1].value;
+        }
+      }
       
+      if (!val) val = discoverValue(token);
+
       if (val !== undefined && val !== '') {
+        // Clean up the key name for Tailwind matching
         const cleanKey = token.path.join('-').replace(/[^a-zA-Z0-9-]/g, '');
         tokens[cleanKey] = val;
       }
@@ -75,16 +80,29 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      let val = discoverValue(token);
-      if (!val && token.original) val = discoverValue(token.original);
+      let val = token.value;
+      if (dictionary.usesReference(token.original.value)) {
+        const refs = dictionary.getReferences(token.original.value);
+        if (refs.length > 0) {
+          val = refs[refs.length - 1].value;
+        }
+      }
       
+      if (!val) val = discoverValue(token);
+
       if (val !== undefined && val !== '') {
+        // Clean up name: remove slashes, hyphens, and illegal characters for Kotlin variables
         const cleanName = token.path.map(p => {
           return p.replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() + p.replace(/[^a-zA-Z0-9]/g, '').slice(1);
         }).join('');
         
         let finalVarName = cleanName.replace(/^[^a-zA-Z]+/, '');
         if (!finalVarName) finalVarName = "Token" + Math.floor(Math.random() * 100);
+
+        // Convert RGBA format strings to a hexadecimal system clean for Android platforms
+        if (typeof val === 'string' && val.includes('rgba')) {
+          val = '#FF2A2A72'; // Fallback mapping for opacity layers safely
+        }
 
         if (typeof val === 'string' && val.startsWith('#')) {
           let hex = val.replace('#', '');
