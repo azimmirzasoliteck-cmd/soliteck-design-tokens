@@ -5,13 +5,16 @@
     "verbosity": "silent"
   },
   "platforms": {
-    "web/tailwind": {
-      "transformGroup": "js",
-      "buildPath": "build/web/",
+    "css": {
+      "transformGroup": "css",
+      "buildPath": "build/css/",
+      "expand": {
+        "include": ["typography"]
+      },
       "files": [
         {
-          "destination": "tailwind-tokens.js",
-          "format": "javascript/module-flat"
+          "destination": "typography.css",
+          "format": "css/variables"
         }
       ]
     },
