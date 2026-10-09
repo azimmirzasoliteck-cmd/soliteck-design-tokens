@@ -1,19 +1,10 @@
 import StyleDictionary from 'style-dictionary';
 import fs from 'fs';
 
-// 1. Load and validate the raw token payload with strict error hooks
-let rawTokens;
-try {
-  if (!fs.existsSync('tokens.json')) {
-    throw new Error('tokens.json not found in the repository root. Ensure your Figma plugin sync is verified.');
-  }
-  rawTokens = JSON.parse(fs.readFileSync('tokens.json', 'utf8'));
-} catch (error) {
-  console.error('❌ Failed to load or parse tokens.json:', error.message);
-  process.exit(1);
-}
+// 1. Load the raw variable payload exported by the Figma plugin
+const rawTokens = JSON.parse(fs.readFileSync('tokens.json', 'utf8'));
 
-// 2. Deep clean and flatten top-level set wraps
+// 2. Flatten top-level set wraps cleanly
 function sanitizeAndFlatten(obj) {
   let combined = {};
   
@@ -33,19 +24,17 @@ function sanitizeAndFlatten(obj) {
 
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 
-// Validate sanitized output profile matrices
-if (!sanitizedTokens || Object.keys(sanitizedTokens).length === 0) {
-  console.error('❌ Sanitization produced an empty object template. Verify tokens.json properties.');
-  process.exit(1);
-}
-
-// Create a flat data dictionary dictionary lookup map to resolve nested references manually
+// Create a flat dictionary map to resolve aliases manually
 const flatValueMap = {};
 function buildValueMap(obj, currentPath = []) {
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
-      if (obj[key].value !== undefined || obj[key].\$value !== undefined) {
-        const val = obj[key].value !== undefined ? obj[key].value : obj[key].\$value;
+      // Modern loops: grab values safely by scanning the object properties keys directly
+      const keys = Object.keys(obj[key]);
+      const valueKey = keys.find(k => k === 'value' || k.endsWith('value'));
+      
+      if (valueKey && obj[key][valueKey] !== undefined) {
+        const val = obj[key][valueKey];
         const lookupKey = [...currentPath, key].join('.');
         flatValueMap[lookupKey] = val;
       } else {
@@ -56,11 +45,11 @@ function buildValueMap(obj, currentPath = []) {
 }
 buildValueMap(sanitizedTokens);
 
-// Recursive lookup tracking function to securely trace reference aliases (e.g., "{Neutral.Neutral-50}" -> "#ffffff")
+// Function to resolve references recursively (e.g., "{Neutral.Neutral-50}" -> real hex)
 function resolveTokenValue(val) {
   if (typeof val !== 'string') return val;
   
-  // Match absolute patterns like {Neutral.Neutral-50}
+  // Match patterns like {Neutral.Neutral-50}
   const refRegex = /^\{([^}]+)\}\$/;
   const match = val.match(refRegex);
   
@@ -71,7 +60,6 @@ function resolveTokenValue(val) {
     }
   }
   
-  // Handle complex composite properties like rgba({Neutral.Neutral-0}, 0.5)
   return val.replace(/\{([^}]+)\}/g, (substring, targetKey) => {
     if (flatValueMap[targetKey] !== undefined) {
       return resolveTokenValue(flatValueMap[targetKey]);
@@ -80,10 +68,10 @@ function resolveTokenValue(val) {
   });
 }
 
-// Write the pristine sanitized data module for tracking configurations
+// Write the sanitized raw file for Style Dictionary tracking
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
-// 3. Register Custom Formats that use our internal reference parsing fallback
+// 3. Register Custom Formats using our custom resolution engine
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
@@ -91,9 +79,11 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      let rawVal = token.value !== undefined ? token.value : (token.value !== undefined ? token.value : '');
+      let rawVal = token.value;
       if (token.original && !rawVal) {
-        rawVal = token.original.value !== undefined ? token.original.value : token.original.\$value;
+        const keys = Object.keys(token.original);
+        const valueKey = keys.find(k => k === 'value' || k.endsWith('value'));
+        if (valueKey) rawVal = token.original[valueKey];
       }
       
       const resolvedVal = resolveTokenValue(rawVal);
@@ -116,9 +106,11 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      let rawVal = token.value !== undefined ? token.value : (token.value !== undefined ? token.value : '');
+      let rawVal = token.value;
       if (token.original && !rawVal) {
-        rawVal = token.original.value !== undefined ? token.original.value : token.original.\$value;
+        const keys = Object.keys(token.original);
+        const valueKey = keys.find(k => k === 'value' || k.endsWith('value'));
+        if (valueKey) rawVal = token.original[valueKey];
       }
       
       let val = resolveTokenValue(rawVal);
@@ -132,7 +124,7 @@ StyleDictionary.registerFormat({
         if (!finalVarName) finalVarName = "Token" + Math.floor(Math.random() * 100);
 
         if (typeof val === 'string' && val.includes('rgba')) {
-          val = '#00000000'; // Safe mapping fallback for alpha-channel opacity layers
+          val = '#00000000'; // Safe fallback for transparent layers
         }
 
         if (typeof val === 'string' && val.startsWith('#')) {
@@ -152,7 +144,7 @@ StyleDictionary.registerFormat({
   }
 });
 
-// 4. Initialize Style Dictionary configuration structures
+// 4. Initialize Style Dictionary instance
 const sd = new StyleDictionary({
   source: ['tokens-sanitized.json'],
   log: {
@@ -186,7 +178,6 @@ const sd = new StyleDictionary({
   }
 });
 
-// 5. Execute compilation with isolated try/catch hooks
 try {
   await sd.buildAllPlatforms();
   console.log('🏁 ✓ Omni-channel token system compilation successful!');
