@@ -40,4 +40,4 @@ jobs:
           git commit -m "chore: automated compilation of web and android token updates [skip ci]" || echo "No changes to commit"
           git pull --rebase origin main
           git push origin main || echo "Push skipped or already up to date"
-ci: explicitly remove temporary json artifact to prevent git commit warnings
+          ci: explicitly remove temporary json artifact to prevent git commit warnings
