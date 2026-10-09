@@ -25,13 +25,28 @@ function sanitizeAndFlatten(obj) {
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
+// Helper function to extract a value from a token no matter where it is hidden
+function extractValue(token) {
+  if (!token) return '';
+  if (token.value !== undefined) return token.value;
+  if (token.value !== undefined) return token.value;
+  if (token.original && token.original.value !== undefined) return token.original.value;
+  if (token.original && token.original.value !== undefined) return token.original.value;
+  return '';
+}
+
 // 3. Register Custom Formats to safely extract values
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
     const tokens = {};
     dictionary.allTokens.forEach(token => {
-      tokens[token.path.join('-')] = token.value;
+      const val = extractValue(token);
+      if (val !== '') {
+        // Clean up the object key name for Tailwind matching
+        const cleanKey = token.path.join('-').replace(/[^a-zA-Z0-9-]/g, '');
+        tokens[cleanKey] = val;
+      }
     });
     return `/**\n * Do not edit directly, this file was auto-generated.\n */\n\nmodule.exports = ${JSON.stringify(tokens, null, 2)};\n`;
   }
@@ -43,17 +58,26 @@ StyleDictionary.registerFormat({
     let output = `package com.soliteck.designsystem\n\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.unit.dp\n\n/**\n * Do not edit directly, this file was auto-generated.\n */\n\nobject DesignTokens {\n`;
     
     dictionary.allTokens.forEach(token => {
-      const cleanName = token.path.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
-      let val = token.value;
-      
-      if (typeof val === 'string' && val.startsWith('#')) {
-        let hex = val.replace('#', '');
-        if (hex.length === 6) hex = 'FF' + hex;
-        output += `    val ${cleanName} = Color(0x${hex.toUpperCase()})\n`;
-      } else if (typeof val === 'number') {
-        output += `    val ${cleanName} = ${val}.dp\n`;
-      } else {
-        output += `    val ${cleanName} = "${val}"\n`;
+      const val = extractValue(token);
+      if (val !== '') {
+        // Clean up name: remove slashes, hyphens, and illegal characters for Kotlin variables
+        const cleanName = token.path.map(p => {
+          return p.replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() + p.replace(/[^a-zA-Z0-9]/g, '').slice(1);
+        }).join('');
+        
+        // Ensure variable name doesn't start with a number or weird underscore
+        let finalVarName = cleanName.replace(/^[^a-zA-Z]+/, '');
+        if (!finalVarName) finalVarName = "Token" + Math.floor(Math.random() * 100);
+
+        if (typeof val === 'string' && val.startsWith('#')) {
+          let hex = val.replace('#', '');
+          if (hex.length === 6) hex = 'FF' + hex;
+          output += `    val ${finalVarName} = Color(0x${hex.toUpperCase()})\n`;
+        } else if (!isNaN(val) && val !== '') {
+          output += `    val ${finalVarName} = ${val}.dp\n`;
+        } else {
+          output += `    val ${finalVarName} = "${val}"\n`;
+        }
       }
     });
     
@@ -69,7 +93,7 @@ const sd = new StyleDictionary({
     warnings: 'disabled',
     verbosity: 'silent',
     errors: {
-      brokenReferences: 'console' // Logs the validation mismatches safely instead of crashing the process
+      brokenReferences: 'console'
     }
   },
   platforms: {
