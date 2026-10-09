@@ -28,13 +28,10 @@ function sanitizeAndFlatten(obj) {
 
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 
-// Build reference value lookup map ignoring prefix paths entirely
+// Build a clean, case-insensitive value map lookup dictionary
 const flatLookup = {};
 function buildFlatLookup(obj, currentPath) {
-  let path = currentPath;
-  if (!path) {
-    path = new Array();
-  }
+  let path = currentPath || new Array();
   
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
@@ -44,8 +41,12 @@ function buildFlatLookup(obj, currentPath) {
       if (valueKey && obj[key][valueKey] !== undefined) {
         const val = obj[key][valueKey];
         const fullPathString = [...path, key].join('-');
+        
         flatLookup[fullPathString.toLowerCase()] = val;
         flatLookup[key.toLowerCase()] = val;
+        // Strip out dots and dashes for alternate lookup fallback paths
+        flatLookup[fullPathString.replace(/[-.]/g, '').toLowerCase()] = val;
+        flatLookup[key.replace(/[-.]/g, '').toLowerCase()] = val;
       } else {
         buildFlatLookup(obj[key], [...path, key]);
       }
@@ -54,52 +55,41 @@ function buildFlatLookup(obj, currentPath) {
 }
 buildFlatLookup(sanitizedTokens, null);
 
-// Helper to pull values safely out of original structures without dot-notation triggers
-function getOriginalValue(token) {
-  if (!token || !token.original) return '';
-  if (token.original.value !== undefined) return token.original.value;
-  return '';
-}
-
+// Advanced case-insensitive reference template resolver
 function deepResolveValue(val) {
   if (typeof val !== 'string') return val;
-  let cleanVal = val.replace(/\{\s*([^}]+)\s*\}/g, '{\$1}');
-  const baseMatch = cleanVal.match(/^\{([^}]+)\}\$/);
+  
+  let workingVal = val.replace(/\{\s*([^}]+)\s*\}/g, '{\$1}');
+  
+  const baseMatch = workingVal.match(/^\{([^}]+)\}\$/);
   if (baseMatch) {
-    const target = baseMatch.replace(/\./g, '-').toLowerCase();
-    for (const key in flatLookup) {
-      if (key.endsWith(target) || target.endsWith(key) || key === target) {
-        return deepResolveValue(flatLookup[key]);
-      }
+    const target = baseMatch[1].replace(/[-.]/g, '').toLowerCase();
+    if (flatLookup[target] !== undefined) {
+      return deepResolveValue(flatLookup[target]);
+    }
+    // Fallback to tracking subkeys
+    const segments = baseMatch[1].split(/[.-]/);
+    const simpleKey = segments[segments.length - 1].toLowerCase();
+    if (flatLookup[simpleKey] !== undefined) {
+      return deepResolveValue(flatLookup[simpleKey]);
     }
   }
-  return cleanVal.replace(/\{([^}]+)\}/g, (substring, refKey) => {
-    const target = refKey.replace(/\./g, '-').toLowerCase();
-    for (const key in flatLookup) {
-      if (key.endsWith(target) || target.endsWith(key) || key === target) {
-        return deepResolveValue(flatLookup[key]);
-      }
+  
+  return workingVal.replace(/\{([^}]+)\}/g, (substring, refKey) => {
+    const target = refKey.replace(/[-.]/g, '').toLowerCase();
+    if (flatLookup[target] !== undefined) {
+      return deepResolveValue(flatLookup[target]);
+    }
+    const segments = refKey.split(/[.-]/);
+    const simpleKey = segments[segments.length - 1].toLowerCase();
+    if (flatLookup[simpleKey] !== undefined) {
+      return deepResolveValue(flatLookup[simpleKey]);
     }
     return substring;
   });
 }
 
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
-
-// Helper to sanitize token key names cleanly
-function cleanKeyName(pathArray) {
-  return pathArray.join('-')
-    .replace(/(Color-PrimitivesDefault-|Global-Color-TokensDefault-|Size-PrimitivesDefault-|TypographyDefault-)/g, '')
-    .replace(/[^a-zA-Z0-9-]/g, '');
-}
-
-// Helper to clean Kotlin variable naming formats
-function cleanKotlinName(pathArray) {
-  return pathArray.map(p => {
-    return p.replace(/(Color-PrimitivesDefault-|Global-Color-TokensDefault-|Size-PrimitivesDefault-|TypographyDefault-)/g, '')
-            .replace(/[^a-zA-Z0-9]/g, '');
-  }).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('').replace(/^[^a-zA-Z]+/, '');
-}
 
 // 3. Register Custom Formats that organize tokens into structured objects
 StyleDictionary.registerFormat({
@@ -110,16 +100,20 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || new Array();
     
     targetTokens.forEach(token => {
-      const rawVal = token.value || getOriginalValue(token);
-      const resolvedVal = deepResolveValue(rawVal);
-      const cleanKey = cleanKeyName(token.path);
+      let rawVal = token.value;
+      if (token.original && (rawVal === undefined || rawVal === '')) {
+        const keys = Object.keys(token.original);
+        const valueKey = keys.find(k => k === 'value' || k.endsWith('value'));
+        if (valueKey) rawVal = token.original[valueKey];
+      }
       
-      if (cleanKey) {
-        if (token.path.join('-').toLowerCase().includes('primitive')) {
-          primitives[cleanKey] = resolvedVal;
-        } else {
-          semantic[cleanKey] = resolvedVal;
-        }
+      const resolvedVal = deepResolveValue(rawVal);
+      const cleanKey = token.path.join('-');
+      
+      if (cleanKey.toLowerCase().includes('primitive')) {
+        primitives[cleanKey] = resolvedVal;
+      } else {
+        semantic[cleanKey] = resolvedVal;
       }
     });
     
@@ -138,9 +132,17 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || new Array();
     
     targetTokens.forEach(token => {
-      const rawVal = token.value || getOriginalValue(token);
+      let rawVal = token.value;
+      if (token.original && (rawVal === undefined || rawVal === '')) {
+        const keys = Object.keys(token.original);
+        const valueKey = keys.find(k => k === 'value' || k.endsWith('value'));
+        if (valueKey) rawVal = token.original[valueKey];
+      }
+      
       let val = deepResolveValue(rawVal);
-      const varName = cleanKotlinName(token.path);
+      
+      // Keep variable names readable and clean for Kotlin layouts
+      const varName = token.path.map(p => p.replace(/[^a-zA-Z0-9]/g, '')).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('').replace(/^[^a-zA-Z]+/, '');
       const fullPath = token.path.join('-').toLowerCase();
       
       if (!varName || val === undefined || val === '') return;
@@ -149,8 +151,8 @@ StyleDictionary.registerFormat({
         const hexExtract = val.match(/#[a-fA-F0-9]{6}/);
         const alphaExtract = val.match(/0\.\d+|1/);
         if (hexExtract) {
-          let hex = hexExtract.replace('#', '');
-          let alphaPercent = alphaExtract ? parseFloat(alphaExtract) : 1;
+          let hex = hexExtract[0].replace('#', '');
+          let alphaPercent = alphaExtract ? parseFloat(alphaExtract[0]) : 1;
           let alphaHex = Math.round(alphaPercent * 255).toString(16).toUpperCase().padStart(2, '0');
           val = `#${alphaHex}${hex}`;
         } else {
@@ -171,13 +173,17 @@ StyleDictionary.registerFormat({
         }
       } else if (!isNaN(val) && val !== '') {
         line = `        val ${varName} = ${val}.dp\n`;
-        spacingOutput += line;
+        if (fullPath.includes('padding') || fullPath.includes('spacing') || fullPath.includes('radius') || fullPath.includes('size')) {
+          spacingOutput += line;
+        } else {
+          primitivesOutput += line;
+        }
       } else {
         line = `        val ${varName} = "${val}"\n`;
-        if (fullPath.includes('typography')) {
+        if (fullPath.includes('typography') || fullPath.includes('font')) {
           typographyOutput += line;
         } else {
-          spacingOutput += line;
+          primitivesOutput += line;
         }
       }
     });
@@ -191,14 +197,14 @@ StyleDictionary.registerFormat({
   }
 });
 
-// 4. Initialize Style Dictionary with isolated error hooks to prevent fatal exits
+// 4. Initialize Style Dictionary Instance
 const sd = new StyleDictionary({
   source: ['tokens-sanitized.json'],
   log: {
     warnings: 'disabled',
     verbosity: 'silent',
     errors: {
-      brokenReferences: 'console' // Routes reference warnings safely to console outputs instead of crashing the job environment
+      brokenReferences: 'console'
     }
   },
   platforms: {
@@ -219,6 +225,6 @@ try {
   await sd.buildAllPlatforms();
   console.log('🏁 ✓ Structured multi-tiered token generation successful!');
 } catch (error) {
-  console.error('❌ Build execution caught an error:', error.message);
-  // Bypass non-breaking reference indicators cleanly
+  console.error('❌ Build failed:', error.message);
+  process.exit(1);
 }
