@@ -31,7 +31,11 @@ const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 // Build reference value lookup map ignoring prefix paths entirely
 const flatLookup = {};
 function buildFlatLookup(obj, currentPath) {
-  const path = currentPath ||;
+  let path = currentPath;
+  if (!path) {
+    path = new Array(); // Bulletproof array construction without brackets
+  }
+  
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
       const keys = Object.keys(obj[key]);
@@ -48,14 +52,14 @@ function buildFlatLookup(obj, currentPath) {
     }
   }
 }
-buildFlatLookup(sanitizedTokens);
+buildFlatLookup(sanitizedTokens, null);
 
 function deepResolveValue(val) {
   if (typeof val !== 'string') return val;
   let cleanVal = val.replace(/\{\s*([^}]+)\s*\}/g, '{\$1}');
   const baseMatch = cleanVal.match(/^\{([^}]+)\}\$/);
   if (baseMatch) {
-    const target = baseMatch.replace(/\./g, '-').toLowerCase();
+    const target = baseMatch[1].replace(/\./g, '-').toLowerCase();
     for (const key in flatLookup) {
       if (key.endsWith(target) || target.endsWith(key) || key === target) {
         return deepResolveValue(flatLookup[key]);
@@ -95,8 +99,9 @@ StyleDictionary.registerFormat({
   format: async function({ dictionary }) {
     const primitives = {};
     const semantic = {};
+    const targetTokens = dictionary.allTokens || new Array();
     
-    dictionary.allTokens.forEach(token => {
+    targetTokens.forEach(token => {
       const rawVal = token.value || (token.original ? (token.original.value || token.original.\$value) : '');
       const resolvedVal = deepResolveValue(rawVal);
       const cleanKey = cleanKeyName(token.path);
@@ -122,7 +127,9 @@ StyleDictionary.registerFormat({
     let spacingOutput = `    object Spacing {\n`;
     let typographyOutput = `    object Typography {\n`;
     
-    dictionary.allTokens.forEach(token => {
+    const targetTokens = dictionary.allTokens || new Array();
+    
+    targetTokens.forEach(token => {
       const rawVal = token.value || (token.original ? (token.original.value || token.original.\$value) : '');
       let val = deepResolveValue(rawVal);
       const varName = cleanKotlinName(token.path);
@@ -134,8 +141,8 @@ StyleDictionary.registerFormat({
         const hexExtract = val.match(/#[a-fA-F0-9]{6}/);
         const alphaExtract = val.match(/0\.\d+|1/);
         if (hexExtract) {
-          let hex = hexExtract.replace('#', '');
-          let alphaPercent = alphaExtract ? parseFloat(alphaExtract) : 1;
+          let hex = hexExtract[0].replace('#', '');
+          let alphaPercent = alphaExtract ? parseFloat(alphaExtract[0]) : 1;
           let alphaHex = Math.round(alphaPercent * 255).toString(16).toUpperCase().padStart(2, '0');
           val = `#${alphaHex}${hex}`;
         } else {
