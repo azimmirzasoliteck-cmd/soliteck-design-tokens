@@ -5,7 +5,7 @@ on:
       - main
     paths:
       - 'tokens.json'
-      - '.github/workflows/token-pipeline.yml' # Allows manual test triggers when updating this file
+      - '.github/workflows/token-pipeline.yml'
 
 jobs:
   build-and-compile:
@@ -21,7 +21,14 @@ jobs:
           cache: 'npm'
 
       - name: Install Build Systems
-        run: npm install # Ensures all package config dependencies fetch properly
+        run: npm install
 
       - name: Run Style Dictionary Compiler
-        run: node build.js # Explicitly executes your custom javascript pre-parser script
+        run: node build.js
+
+      - name: Deploy Compiled Tokens to Homepage
+        run: |
+          git config --global user.name "Soliteck DesignBot"
+          git config --global user.email "designbot@soliteck.com"
+          git add build/
+          git diff-index --quiet HEAD || (git commit -m "chore: automated compilation of web and android token updates [skip ci]" && git push origin main)
