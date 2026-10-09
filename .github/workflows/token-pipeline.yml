@@ -19,7 +19,7 @@ jobs:
       - name: Initialize Node Environment
         uses: actions/setup-node@v4
         with:
-          node-version: '24' # Upgraded to resolve runtime environment deprecations completely
+          node-version: '24'
           cache: 'npm'
 
       - name: Install Build Systems
@@ -30,8 +30,8 @@ jobs:
 
       - name: Deploy Compiled Tokens to Homepage
         run: |
-          git config --global user.name "Soliteck ArchitectBot"
-          git config --global user.email "architectbot@soliteck.com"
+          git config --global user.name "Soliteck DesignBot"
+          git config --global user.email "designbot@soliteck.com"
           rm -f tokens-sanitized.json
           git add build/
           git commit -m "chore: automated compilation of web and android token updates [skip ci]" || echo "No changes to commit"
