@@ -4,42 +4,37 @@ import fs from 'fs';
 // 1. Load the raw variable payload exported by the Figma plugin
 const rawTokens = JSON.parse(fs.readFileSync('tokens.json', 'utf8'));
 
-// 2. Extract and flatten top-level set wraps so references resolve instantly
-function flattenTokenSets(obj) {
+// 2. Flatten top-level set wraps cleanly without string syntax traps
+function sanitizeAndFlatten(obj) {
   let combined = {};
   
-  const sets = ['global', 'semantic'];
-  for (const set of sets) {
-    if (obj[set]) {
-      combined = { ...combined, ...obj[set] };
-    }
-  }
+  // Directly pull and combine the properties from the global and semantic sets
+  if (obj.global) combined = { ...combined, ...obj.global };
+  if (obj.semantic) combined = { ...combined, ...obj.semantic };
   
   if (Object.keys(combined).length === 0) {
-    for (const key in obj) {
-      if (typeof obj[key] === 'object' && !obj[key].value && !obj[key].\$value) {
-        combined = { ...combined, ...obj[key] };
-      }
-    }
+    combined = { ...obj };
   }
-  
+
+  // Sanitize internal string references (e.g., "{global.color}" to "{color}")
   let jsonString = JSON.stringify(combined);
-  jsonString = jsonString.replace(/\{global\./g, '{');
-  jsonString = jsonString.replace(/\{semantic\./g, '{');
+  jsonString = jsonString.replaceAll('{global.', '{');
+  jsonString = jsonString.replaceAll('{semantic.', '{');
   
   return JSON.parse(jsonString);
 }
 
-const sanitizedTokens = flattenTokenSets(rawTokens);
+const sanitizedTokens = sanitizeAndFlatten(rawTokens);
 fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
-// 3. Register Custom Formats to safely read and extract token values into files
+// 3. Register Custom Formats to safely extract values using dictionary tokens mapping
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
     const tokens = {};
     dictionary.allTokens.forEach(token => {
-      tokens[token.path.join('-')] = token.value || token.\$value;
+      // Safely fetch token value by looking at standard value paths
+      tokens[token.path.join('-')] = token.value;
     });
     return `/**\n * Do not edit directly, this file was auto-generated.\n */\n\nmodule.exports = ${JSON.stringify(tokens, null, 2)};\n`;
   }
@@ -52,7 +47,7 @@ StyleDictionary.registerFormat({
     
     dictionary.allTokens.forEach(token => {
       const cleanName = token.path.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
-      let val = token.value || token.\$value;
+      let val = token.value;
       
       if (typeof val === 'string' && val.startsWith('#')) {
         let hex = val.replace('#', '');
@@ -70,7 +65,7 @@ StyleDictionary.registerFormat({
   }
 });
 
-// 4. Initialize the Style Dictionary instance architecture pointing to our custom formats
+// 4. Initialize Style Dictionary pointing directly to our custom format processors
 const sd = new StyleDictionary({
   source: ['tokens-sanitized.json'],
   platforms: {
@@ -97,5 +92,5 @@ const sd = new StyleDictionary({
   }
 });
 
-// 5. Fire the cross-platform compilation matrix
+// 5. Run the cross-platform compilation matrices
 await sd.buildAllPlatforms();
