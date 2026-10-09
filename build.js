@@ -38,7 +38,6 @@ StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
     const tokens = {};
-    // Recursively pull all flattened token entries out of the processed dictionary
     dictionary.allTokens.forEach(token => {
       tokens[token.path.join('-')] = token.value || token.\$value;
     });
@@ -56,7 +55,6 @@ StyleDictionary.registerFormat({
       let val = token.value || token.\$value;
       
       if (typeof val === 'string' && val.startsWith('#')) {
-        // Automatically translate standard hex parameters to hex formats for Android colors
         let hex = val.replace('#', '');
         if (hex.length === 6) hex = 'FF' + hex;
         output += `    val ${cleanName} = Color(0x${hex.toUpperCase()})\n`;
@@ -99,5 +97,5 @@ const sd = new StyleDictionary({
   }
 });
 
-// 5. Fire the cross-platform compilation matrices
+// 5. Fire the cross-platform compilation matrix
 await sd.buildAllPlatforms();
