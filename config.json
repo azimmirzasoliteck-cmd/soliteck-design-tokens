@@ -1,5 +1,9 @@
 {
   "source": ["tokens.json"],
+  "log": {
+    "warnings": "disabled",
+    "verbosity": "silent"
+  },
   "platforms": {
     "web/tailwind": {
       "transformGroup": "js",
