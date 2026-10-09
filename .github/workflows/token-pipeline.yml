@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - 'tokens.json'
+      - 'build.js' # Crucial: Triggers a fresh run whenever build.js updates!
       - '.github/workflows/token-pipeline.yml'
 
 jobs:
