@@ -2,9 +2,10 @@
   "name": "soliteck-design-tokens",
   "version": "1.0.0",
   "description": "Automated cross-platform token pipeline for Soliteck",
-  "main": "index.js",
+  "main": "build.js",
+  "type": "module",
   "scripts": {
-  "build-tokens": "node build.js"
+    "build-tokens": "node build.js"
   },
   "repository": {
     "type": "git",
@@ -13,9 +14,7 @@
   "keywords": [],
   "author": "Azim Mirza",
   "license": "ISC",
-  "type": "commonjs",
   "devDependencies": {
-    "style-dictionary": "^5.6.0",
-    "@tokens-studio/sd-transforms": "^0.16.0"
+    "style-dictionary": "^5.6.0"
   }
 }
