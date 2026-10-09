@@ -23,26 +23,53 @@ function sanitizeAndFlatten(obj) {
 }
 
 const sanitizedTokens = sanitizeAndFlatten(rawTokens);
-fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
 
-// Recursive lookup function to trace down the raw value parameter no matter the nesting depth
-function discoverValue(tokenObj) {
-  if (!tokenObj) return '';
-  if (tokenObj.value !== undefined) return tokenObj.value;
-  if (typeof tokenObj === 'object') {
-    if (tokenObj.value !== undefined) return tokenObj.value;
-    // Fall back to original definition structures
-    if (tokenObj.original && tokenObj.original.value !== undefined) return tokenObj.original.value;
-    
-    // Deep structural scan if the value is nested under a primary key
-    for (const subKey in tokenObj) {
-      if (subKey === 'value' || subKey === '\$value') return tokenObj[subKey];
+// Create a flat dictionary map to resolve aliases manually
+const flatValueMap = {};
+function buildValueMap(obj, currentPath = []) {
+  for (const key in obj) {
+    if (obj[key] && typeof obj[key] === 'object') {
+      if (obj[key].value !== undefined || obj[key].\$value !== undefined) {
+        const val = obj[key].value !== undefined ? obj[key].value : obj[key].\$value;
+        const lookupKey = [...currentPath, key].join('.');
+        flatValueMap[lookupKey] = val;
+      } else {
+        buildValueMap(obj[key], [...currentPath, key]);
+      }
     }
   }
-  return '';
+}
+buildValueMap(sanitizedTokens);
+
+// Function to resolve references recursively (e.g., "{Neutral.Neutral-50}" -> real hex)
+function resolveTokenValue(val) {
+  if (typeof val !== 'string') return val;
+  
+  // Match patterns like {Neutral.Neutral-50}
+  const refRegex = /^\{([^}]+)\}\$/;
+  const match = val.match(refRegex);
+  
+  if (match) {
+    const targetKey = match[1];
+    if (flatValueMap[targetKey] !== undefined) {
+      // Recursively resolve in case it points to another alias
+      return resolveTokenValue(flatValueMap[targetKey]);
+    }
+  }
+  
+  // Handle composite values like rgba({Neutral.Neutral-0}, 0)
+  return val.replace(/\{([^}]+)\}/g, (substring, targetKey) => {
+    if (flatValueMap[targetKey] !== undefined) {
+      return resolveTokenValue(flatValueMap[targetKey]);
+    }
+    return substring;
+  });
 }
 
-// 3. Register Custom Formats using robust reference-resolution engines
+// Write the sanitized raw file for Style Dictionary tracking
+fs.writeFileSync('tokens-sanitized.json', JSON.stringify(sanitizedTokens, null, 2));
+
+// 3. Register Custom Formats using our custom resolution engine
 StyleDictionary.registerFormat({
   name: 'custom/tailwind-js',
   format: async function({ dictionary }) {
@@ -50,21 +77,16 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      // Use Style Dictionary's built-in reference resolver if the token points to an alias
-      let val = token.value;
-      if (dictionary.usesReference(token.original.value)) {
-        const refs = dictionary.getReferences(token.original.value);
-        if (refs.length > 0) {
-          val = refs[refs.length - 1].value;
-        }
+      let rawVal = token.value !== undefined ? token.value : (token.value !== undefined ? token.value : '');
+      if (token.original && !rawVal) {
+        rawVal = token.original.value !== undefined ? token.original.value : token.original.\$value;
       }
       
-      if (!val) val = discoverValue(token);
+      const resolvedVal = resolveTokenValue(rawVal);
 
-      if (val !== undefined && val !== '') {
-        // Clean up the key name for Tailwind matching
+      if (resolvedVal !== undefined && resolvedVal !== '') {
         const cleanKey = token.path.join('-').replace(/[^a-zA-Z0-9-]/g, '');
-        tokens[cleanKey] = val;
+        tokens[cleanKey] = resolvedVal;
       }
     });
     
@@ -80,18 +102,14 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || [];
     
     targetTokens.forEach(token => {
-      let val = token.value;
-      if (dictionary.usesReference(token.original.value)) {
-        const refs = dictionary.getReferences(token.original.value);
-        if (refs.length > 0) {
-          val = refs[refs.length - 1].value;
-        }
+      let rawVal = token.value !== undefined ? token.value : (token.value !== undefined ? token.value : '');
+      if (token.original && !rawVal) {
+        rawVal = token.original.value !== undefined ? token.original.value : token.original.\$value;
       }
       
-      if (!val) val = discoverValue(token);
+      let val = resolveTokenValue(rawVal);
 
       if (val !== undefined && val !== '') {
-        // Clean up name: remove slashes, hyphens, and illegal characters for Kotlin variables
         const cleanName = token.path.map(p => {
           return p.replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() + p.replace(/[^a-zA-Z0-9]/g, '').slice(1);
         }).join('');
@@ -99,9 +117,9 @@ StyleDictionary.registerFormat({
         let finalVarName = cleanName.replace(/^[^a-zA-Z]+/, '');
         if (!finalVarName) finalVarName = "Token" + Math.floor(Math.random() * 100);
 
-        // Convert RGBA format strings to a hexadecimal system clean for Android platforms
+        // Convert complex alpha strings safely to Android hex values
         if (typeof val === 'string' && val.includes('rgba')) {
-          val = '#FF2A2A72'; // Fallback mapping for opacity layers safely
+          val = '#00000000'; // Safe fallback for transparent layers
         }
 
         if (typeof val === 'string' && val.startsWith('#')) {
