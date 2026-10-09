@@ -1,6 +1,5 @@
 {
   "source": ["tokens.json"],
-  "include": ["tokens.json"],
   "platforms": {
     "web/tailwind": {
       "transformGroup": "js",
@@ -13,14 +12,12 @@
       ]
     },
     "android/compose": {
-      "transformGroup": "android",
+      "transformGroup": "js",
       "buildPath": "build/android/",
       "files": [
         {
           "destination": "DesignTokens.kt",
-          "format": "compose/object",
-          "className": "DesignTokens",
-          "packageName": "com.soliteck.designsystem"
+          "format": "javascript/module-flat"
         }
       ]
     }
