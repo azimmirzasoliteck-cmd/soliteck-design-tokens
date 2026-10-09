@@ -40,3 +40,4 @@ jobs:
           git commit -m "chore: automated compilation of web and android token updates [skip ci]" || echo "No changes to commit"
           git pull --rebase origin main
           git push origin main || echo "Push skipped or already up to date"
+          
