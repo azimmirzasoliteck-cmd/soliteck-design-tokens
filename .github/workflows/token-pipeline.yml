@@ -32,8 +32,12 @@ jobs:
         run: |
           git config --global user.name "Soliteck DesignBot"
           git config --global user.email "designbot@soliteck.com"
+          
+          # Clean up the untracked temporary file so Git stays completely happy
+          rm -f tokens-sanitized.json
+          
           git add build/
-          git status
           git commit -m "chore: automated compilation of web and android token updates [skip ci]" || echo "No changes to commit"
           git pull --rebase origin main
           git push origin main || echo "Push skipped or already up to date"
+ci: explicitly remove temporary json artifact to prevent git commit warnings
