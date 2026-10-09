@@ -33,7 +33,7 @@ const flatLookup = {};
 function buildFlatLookup(obj, currentPath) {
   let path = currentPath;
   if (!path) {
-    path = new Array(); // Bulletproof array construction without brackets
+    path = new Array();
   }
   
   for (const key in obj) {
@@ -53,6 +53,14 @@ function buildFlatLookup(obj, currentPath) {
   }
 }
 buildFlatLookup(sanitizedTokens, null);
+
+// Helper to pull values safely out of original structures without dot-notation triggers
+function getOriginalValue(token) {
+  if (!token || !token.original) return '';
+  if (token.original.value !== undefined) return token.original.value;
+  if (token.original['\(value'] !== undefined) return token.original['\)value'];
+  return '';
+}
 
 function deepResolveValue(val) {
   if (typeof val !== 'string') return val;
@@ -102,7 +110,7 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || new Array();
     
     targetTokens.forEach(token => {
-      const rawVal = token.value || (token.original ? (token.original.value || token.original.\$value) : '');
+      const rawVal = token.value || getOriginalValue(token);
       const resolvedVal = deepResolveValue(rawVal);
       const cleanKey = cleanKeyName(token.path);
       
@@ -130,7 +138,7 @@ StyleDictionary.registerFormat({
     const targetTokens = dictionary.allTokens || new Array();
     
     targetTokens.forEach(token => {
-      const rawVal = token.value || (token.original ? (token.original.value || token.original.\$value) : '');
+      const rawVal = token.value || getOriginalValue(token);
       let val = deepResolveValue(rawVal);
       const varName = cleanKotlinName(token.path);
       const fullPath = token.path.join('-').toLowerCase();
@@ -141,8 +149,8 @@ StyleDictionary.registerFormat({
         const hexExtract = val.match(/#[a-fA-F0-9]{6}/);
         const alphaExtract = val.match(/0\.\d+|1/);
         if (hexExtract) {
-          let hex = hexExtract[0].replace('#', '');
-          let alphaPercent = alphaExtract ? parseFloat(alphaExtract[0]) : 1;
+          let hex = hexExtract.replace('#', '');
+          let alphaPercent = alphaExtract ? parseFloat(alphaExtract) : 1;
           let alphaHex = Math.round(alphaPercent * 255).toString(16).toUpperCase().padStart(2, '0');
           val = `#${alphaHex}${hex}`;
         } else {
